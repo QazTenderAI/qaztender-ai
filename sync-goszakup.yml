@@ -1,0 +1,43 @@
+name: Sync official procurement data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-goszakup
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GOSZAKUP_API_TOKEN: ${{ secrets.GOSZAKUP_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check API token
+        if: env.GOSZAKUP_API_TOKEN == ''
+        run: |
+          echo "::warning::GOSZAKUP_API_TOKEN is not configured. Official data was not downloaded."
+
+      - name: Download official announcements
+        if: env.GOSZAKUP_API_TOKEN != ''
+        run: node scripts/sync-goszakup.mjs
+
+      - name: Commit refreshed public dataset
+        if: env.GOSZAKUP_API_TOKEN != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/tenders.json
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "Update official procurement data"
+            git push
+          fi
